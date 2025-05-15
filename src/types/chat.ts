@@ -24,3 +24,5 @@ export interface ChatSession {
   createdAt: Timestamp;
   lastMessageTimestamp?: Timestamp;
 }
+
+//git

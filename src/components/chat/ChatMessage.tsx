@@ -89,3 +89,5 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({ message }) => {
 };
 
 export const ChatMessage = React.memo(ChatMessageComponent);
+
+//git
