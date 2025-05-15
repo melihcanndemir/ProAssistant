@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react'; // Added React import
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
@@ -25,6 +25,7 @@ export default function ChatRedirectPage() {
     const findOrCreateChat = async () => {
       setIsLoading(true);
       const chatsCollectionRef = collection(db, `users/${user.uid}/chats`);
+      // Query for chats ordered by lastMessageTimestamp descending, or createdAt if lastMessageTimestamp doesn't exist yet for a new chat
       const q = query(chatsCollectionRef, orderBy('lastMessageTimestamp', 'desc'), limit(1));
       
       try {
@@ -45,8 +46,14 @@ export default function ChatRedirectPage() {
       } catch (error) {
         console.error("Error finding or creating chat:", error);
         // Handle error appropriately, maybe redirect to an error page or show a toast
-        setIsLoading(false);
+        // For now, just stop loading and let the user potentially be stuck on a blank page or current page
+        setIsLoading(false); 
+        // A better UX would be to redirect to an error page or show a global toast.
+        // router.replace('/error-page'); // Example
       }
+      // setLoading(false) should ideally be here if navigation always succeeds or in a finally block
+      // but given the router.replace, it might unmount before this.
+      // The spinner will stop once navigation completes or if an error sets isLoading to false.
     };
 
     findOrCreateChat();
