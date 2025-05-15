@@ -16,3 +16,11 @@ export interface ChatMessage {
   citations?: Citation[];
   isLoading?: boolean; // Added to indicate AI is typing or message is streaming
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  userId: string;
+  createdAt: Timestamp;
+  lastMessageTimestamp?: Timestamp;
+}
