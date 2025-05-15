@@ -2,27 +2,23 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
-import { ChatInput as ChatInputComponent } from '@/components/chat/ChatInput'; // Renamed to avoid conflict
+import { ChatInput as ChatInputComponent } from '@/components/chat/ChatInput';
 import type { ChatMessage, Citation } from '@/types/chat';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, query, orderBy, onSnapshot, serverTimestamp, Timestamp, DocumentReference } from 'firebase/firestore';
 import { generateCitations as generateCitationsFlow } from '@/ai/flows/citation-generation';
-import { chat as chatFlow, type ChatInput } from '@/ai/flows/chat-flow'; // Import the new chat flow
+import { chat as chatFlow, type ChatInput, type ChatOutput } from '@/ai/flows/chat-flow';
 import { useToast } from '@/hooks/use-toast';
 import { Card } from '@/components/ui/card';
-// import { Metadata } from 'next'; // Cannot be used in client component
-
-// Cannot set metadata in client component, should be done in a parent server component or page.tsx if it were server-rendered.
-// export const metadata: Metadata = {
-//   title: 'Chat - ProAssistant',
-// };
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const { user } = useAuth();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isAiResponding, setIsAiResponding] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -48,6 +44,9 @@ export default function ChatPage() {
   const handleSendMessage = async (text: string, imageFile?: File) => {
     if (!user || (!text.trim() && !imageFile)) return;
 
+    setIsAiResponding(true);
+    abortControllerRef.current = new AbortController();
+
     let generatedCitations: Citation[] | undefined;
     try {
       if (text.includes('http://') || text.includes('https://')) {
@@ -71,53 +70,127 @@ export default function ChatPage() {
       userId: user.uid,
       timestamp: serverTimestamp(),
     };
-
     if (generatedCitations && generatedCitations.length > 0) {
       userMessageData.citations = generatedCitations;
     }
 
     const messagesCollection = collection(db, `users/${user.uid}/messages`);
-    
+    let aiMessageRef: DocumentReference | null = null;
+    let aiMessageId: string | null = null;
+    const tempClientAiMessageId = `temp-ai-${Date.now()}`; // For optimistic UI update
+
     try {
-      // Add user message to Firestore
       await addDoc(messagesCollection, userMessageData);
 
-      // Get AI Response
-      const aiFlowInput: ChatInput = { message: text.trim() };
-      // Here you could also pass message history to the AI if your flow supports it
-      // aiFlowInput.history = messages.slice(-10).map(m => ({role: m.sender === 'user' ? 'user' : 'model', content: m.text}));
-      
-      const aiResponseOutput = await chatFlow(aiFlowInput);
-
-      let aiResponseText = "I'm sorry, I couldn't quite understand that. Could you please rephrase?"; // Default fallback
-      if (aiResponseOutput && aiResponseOutput.response) {
-        aiResponseText = aiResponseOutput.response;
-      }
-      
-      const aiMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
-        text: aiResponseText,
-        sender: 'ai',
-        userId: 'proassistant-ai', 
-        timestamp: serverTimestamp(),
-      };
-      // Add AI message to Firestore
-      await addDoc(messagesCollection, aiMessageData);
-
-    } catch (error) {
-      console.error("Error sending message or getting AI response:", error);
-      toast({
-        title: "Error",
-        description: "Could not send message or get AI response.",
-        variant: "destructive",
-      });
-       // Optionally, add a more generic AI error message to chat if the flow itself failed
-       const errorAiMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
-        text: "Apologies, I'm having trouble connecting right now. Please try again in a moment.",
+      // Add placeholder for AI message
+      const aiMessagePlaceholderData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+        text: '...', // Typing indicator
         sender: 'ai',
         userId: 'proassistant-ai',
         timestamp: serverTimestamp(),
+        isLoading: true,
       };
-      await addDoc(messagesCollection, errorAiMessage);
+      
+      // Optimistically add placeholder to local state
+      setMessages(prevMessages => [
+        ...prevMessages,
+        { ...aiMessagePlaceholderData, id: tempClientAiMessageId, timestamp: new Timestamp(Math.floor(Date.now()/1000),0) } as ChatMessage
+      ]);
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+
+      aiMessageRef = await addDoc(messagesCollection, aiMessagePlaceholderData);
+      aiMessageId = aiMessageRef.id;
+
+      // Update local state with real ID and clear text for streaming
+      setMessages(prevMessages => prevMessages.map(msg => 
+        msg.id === tempClientAiMessageId ? { ...msg, id: aiMessageId!, text: '', isLoading: true } : msg
+      ));
+
+      const aiFlowInput: ChatInput = { message: text.trim() };
+      // Await the server action call
+      const { stream, response: finalResponsePromise } = await chatFlow(aiFlowInput);
+
+      let accumulatedResponse = '';
+      for await (const chunk of stream) {
+        if (abortControllerRef.current?.signal.aborted) {
+          console.log("AI response streaming aborted by user.");
+          if (aiMessageRef) {
+            await updateDoc(aiMessageRef, { text: accumulatedResponse + "\n(Yanıt iptal edildi)", isLoading: false, timestamp: serverTimestamp() });
+          }
+          setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: accumulatedResponse + "\n(Yanıt iptal edildi)", isLoading: false} : m));
+          break;
+        }
+        
+        if (chunk.output?.response) {
+          // Append the new part of the response.
+          // Genkit streams can sometimes send the whole acculumated response in each chunk,
+          // or just the delta. The prompt is simple so it's likely sending deltas or small fulls.
+          // For this example, we assume `chunk.output.response` is the *new piece* or *current full text*.
+          // To be safe, let's just set it as the current text.
+          accumulatedResponse = chunk.output.response; 
+          if (aiMessageRef) {
+            // No need to await updateDoc for every chunk if performance is critical,
+            // but it ensures data persistence if connection drops.
+            // For a smoother UI, you might only update Firestore less frequently or at the end.
+            await updateDoc(aiMessageRef, { text: accumulatedResponse, isLoading: true });
+          }
+          setMessages(prevMessages =>
+            prevMessages.map(msg =>
+              msg.id === aiMessageId ? { ...msg, text: accumulatedResponse, isLoading: true } : msg
+            )
+          );
+        }
+      }
+
+      if (abortControllerRef.current?.signal.aborted) {
+        // Already handled
+      } else {
+        const finalAiOutput = (await finalResponsePromise).output;
+        if (finalAiOutput?.response) {
+          if (aiMessageRef) {
+            await updateDoc(aiMessageRef, { text: finalAiOutput.response, isLoading: false, timestamp: serverTimestamp() });
+          }
+          setMessages(prevMessages =>
+            prevMessages.map(msg =>
+              msg.id === aiMessageId ? { ...msg, text: finalAiOutput.response, isLoading: false } : msg
+            )
+          );
+        } else {
+          const errorText = "Üzgünüm, yanıtımı tamamlayamadım.";
+          if (aiMessageRef) await updateDoc(aiMessageRef, { text: errorText, isLoading: false, timestamp: serverTimestamp() });
+          setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: errorText, isLoading: false} : m));
+        }
+      }
+
+    } catch (error: any) {
+      console.error("Error sending message or getting AI response:", error);
+      const errorText = "Özür dilerim, yanıt verirken bir sorunla karşılaştım.";
+      if (aiMessageRef && aiMessageId) {
+        await updateDoc(aiMessageRef, { text: errorText, isLoading: false, timestamp: serverTimestamp() });
+         setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: errorText, isLoading: false} : m));
+      } else {
+         // If AI placeholder wasn't even added to FS or local state correctly
+         setMessages(prev => prev.filter(m => m.id !== tempClientAiMessageId)); // Remove optimistic placeholder
+         const errorAiMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+          text: errorText, sender: 'ai', userId: 'proassistant-ai', timestamp: serverTimestamp(), isLoading: false
+        };
+        await addDoc(messagesCollection, errorAiMessage); // Add a new error message
+      }
+      toast({
+        title: "AI Hatası",
+        description: error.message || "Yapay zeka yanıtı alınamadı.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAiResponding(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
   
@@ -129,7 +202,11 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
         <div className="border-t p-4 md:p-6 bg-background">
-          <ChatInputComponent onSendMessage={handleSendMessage} />
+          <ChatInputComponent 
+            onSendMessage={handleSendMessage} 
+            isAiResponding={isAiResponding}
+            onStopGenerating={handleStopGenerating}
+          />
         </div>
       </Card>
     </div>

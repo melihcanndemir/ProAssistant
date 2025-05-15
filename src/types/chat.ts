@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Citation {
@@ -13,4 +14,5 @@ export interface ChatMessage {
   timestamp: Timestamp; 
   imageUrl?: string;
   citations?: Citation[];
+  isLoading?: boolean; // Added to indicate AI is typing or message is streaming
 }

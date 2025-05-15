@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -103,7 +104,6 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Removed explicit font-family: Arial to allow Geist Sans from layout.tsx to apply */
   }
 }
 
@@ -111,3 +111,20 @@
 html, body, #__next {
   height: 100%;
 }
+
+/* Keyframes for typing indicator (used if Tailwind's default bounce is not sufficient) */
+/* @keyframes bounce_alt {
+  0%, 100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8,0,1,1);
+  }
+  50% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0,0,0.2,1);
+  }
+}
+
+.animate-bounce_alt {
+  animation: bounce_alt 1s infinite;
+} */
+

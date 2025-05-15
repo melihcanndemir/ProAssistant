@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Bot, User } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 interface ChatMessageProps {
@@ -15,18 +15,8 @@ interface ChatMessageProps {
 
 const ChatMessageComponent: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.sender === 'user';
-  const
- 
-timestamp = message.timestamp ? (message.timestamp as any).toDate ? (message.timestamp as any).toDate() : new Date(message.timestamp as any) : new Date();
+  const timestamp = message.timestamp ? (message.timestamp as any).toDate ? (message.timestamp as any).toDate() : new Date(message.timestamp as any) : new Date();
 
-  const getInitials = (name?: string | null) => {
-    if (!name) return isUser ? <User className="h-5 w-5" /> : <Bot className="h-5 w-5" />;
-    const names = name.split(' ');
-    if (names.length === 1 && names[0].length > 0) return names[0].substring(0, 2).toUpperCase();
-    return names.map(n => n[0]).join('').toUpperCase();
-  }
-  
-  // A very basic markdown link replacer. For full markdown, a library is needed.
   const renderTextWithLinks = (text: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     return text.split(urlRegex).map((part, index) => {
@@ -37,6 +27,13 @@ timestamp = message.timestamp ? (message.timestamp as any).toDate ? (message.tim
     });
   };
 
+  const TypingIndicator = () => (
+    <div className="flex items-center space-x-1 p-1">
+      <div className="h-2 w-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+      <div className="h-2 w-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+      <div className="h-2 w-2 bg-muted-foreground rounded-full animate-bounce"></div>
+    </div>
+  );
 
   return (
     <div className={cn("flex gap-3 my-4", isUser ? "justify-end" : "justify-start")}>
@@ -48,9 +45,13 @@ timestamp = message.timestamp ? (message.timestamp as any).toDate ? (message.tim
       <Card className={cn("max-w-xs md:max-w-md lg:max-w-lg xl:max-w-2xl rounded-xl shadow", 
                         isUser ? "bg-primary text-primary-foreground rounded-br-none" : "bg-card text-card-foreground rounded-bl-none")}>
         <CardContent className="p-3">
-          <div className="text-sm whitespace-pre-wrap break-words">
-            {renderTextWithLinks(message.text)}
-          </div>
+          {message.isLoading && message.text === "..." ? (
+            <TypingIndicator />
+          ) : (
+            <div className="text-sm whitespace-pre-wrap break-words">
+              {renderTextWithLinks(message.text)}
+            </div>
+          )}
           {message.imageUrl && (
             <div className="mt-2 rounded-lg overflow-hidden">
               <Image src={message.imageUrl} alt="Uploaded content" width={300} height={200} className="object-cover" data-ai-hint="chat image" />
@@ -71,13 +72,15 @@ timestamp = message.timestamp ? (message.timestamp as any).toDate ? (message.tim
             </div>
           )}
         </CardContent>
-        <CardFooter className={cn("text-xs px-3 pb-2 pt-1", isUser ? "text-primary-foreground/70 justify-end" : "text-muted-foreground justify-start")}>
-          {format(timestamp, 'p')}
-        </CardFooter>
+        {!message.isLoading && ( // Only show footer if not loading or if it's a user message
+             (isUser || (!isUser && message.text !== "...")) && // AI message footer shown if not initial placeholder
+            <CardFooter className={cn("text-xs px-3 pb-2 pt-1", isUser ? "text-primary-foreground/70 justify-end" : "text-muted-foreground justify-start")}>
+                {format(timestamp, 'p')}
+            </CardFooter>
+        )}
       </Card>
       {isUser && (
          <Avatar className="h-10 w-10 border">
-          {/* Placeholder for user avatar, ideally from auth context */}
           <AvatarFallback><User className="h-5 w-5 text-primary"/></AvatarFallback>
         </Avatar>
       )}
@@ -85,5 +88,4 @@ timestamp = message.timestamp ? (message.timestamp as any).toDate ? (message.tim
   );
 };
 
-// Memoize ChatMessage for performance, preventing re-renders if props haven't changed.
 export const ChatMessage = React.memo(ChatMessageComponent);

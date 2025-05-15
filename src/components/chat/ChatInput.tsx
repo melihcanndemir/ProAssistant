@@ -2,27 +2,28 @@
 "use client";
 import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input'; // Use Textarea for multi-line input
 import { Textarea } from '@/components/ui/textarea';
-import { Paperclip, SendHorizonal, Sparkles } from 'lucide-react';
+import { Paperclip, SendHorizonal, Square, Sparkles } from 'lucide-react'; // Added Square for stop
 import { autoComplete as autoCompleteFlow } from '@/ai/flows/auto-completion';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Spinner } from '@/components/ui/spinner';
 
 interface ChatInputProps {
   onSendMessage: (text: string, imageFile?: File) => void;
+  isAiResponding: boolean;
+  onStopGenerating: () => void;
 }
 
-export function ChatInput({ onSendMessage }: ChatInputProps) {
+export function ChatInput({ onSendMessage, isAiResponding, onStopGenerating }: ChatInputProps) {
   const [text, setText] = useState('');
   const [imageFile, setImageFile] = useState<File | undefined>(undefined);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTypingForSuggestion, setIsTypingForSuggestion] = useState(false); // Renamed from isTyping
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
 
   const fetchSuggestions = useCallback(async (currentText: string) => {
-    if (!currentText.trim() || currentText.length < 3) { // Min length for suggestions
+    if (!currentText.trim() || currentText.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -31,7 +32,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
     try {
       const result = await autoCompleteFlow({ text: currentText });
       if (result && result.suggestion) {
-        setSuggestions([result.suggestion]); // Genkit flow provides one suggestion
+        setSuggestions([result.suggestion]);
         setShowSuggestions(true);
       } else {
         setSuggestions([]);
@@ -48,21 +49,21 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
 
   useEffect(() => {
     let typingTimer: NodeJS.Timeout;
-    if (isTyping && text.trim()) {
+    if (isTypingForSuggestion && text.trim() && !isAiResponding) { // Only fetch suggestions if not waiting for AI response
       typingTimer = setTimeout(() => {
         fetchSuggestions(text);
-      }, 500); // Debounce API call
+      }, 500); 
     }
     return () => clearTimeout(typingTimer);
-  }, [text, isTyping, fetchSuggestions]);
+  }, [text, isTypingForSuggestion, fetchSuggestions, isAiResponding]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
-    setIsTyping(true);
+    setIsTypingForSuggestion(true);
     if (!e.target.value.trim()) {
       setSuggestions([]);
       setShowSuggestions(false);
-      setIsTyping(false);
+      setIsTypingForSuggestion(false);
     }
   };
 
@@ -71,19 +72,18 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
     setText(text.substring(0, lastWordIndex) + suggestion + ' ');
     setSuggestions([]);
     setShowSuggestions(false);
-    // Focus the textarea
     document.getElementById('chat-input-textarea')?.focus();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAiResponding) return; // Don't submit if AI is already responding
     if (text.trim() || imageFile) {
       onSendMessage(text, imageFile);
       setText('');
       setImageFile(undefined);
       setSuggestions([]);
       setShowSuggestions(false);
-      // Clear file input if it exists
       const fileInput = document.getElementById('file-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     }
@@ -92,14 +92,13 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setImageFile(e.target.files[0]);
-      // Optionally, show a preview or file name
     }
   };
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isAiResponding) {
       e.preventDefault();
-      handleSubmit(e as any); // Cast to any to satisfy form event type
+      handleSubmit(e as any); 
     }
   };
 
@@ -111,15 +110,16 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
           value={text}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message or ask ProAssistant..."
+          placeholder={isAiResponding ? "ProAssistant yanıtlıyor..." : "Mesajınızı yazın veya ProAssistant'a sorun..."}
           className="pr-10 min-h-[40px] max-h-[200px] resize-none"
           rows={1}
-          onBlur={() => setTimeout(() => { setIsTyping(false); /*setShowSuggestions(false);*/ }, 200)} // Delay hide to allow click
-          onFocus={() => text && text.length > 2 && fetchSuggestions(text) }
+          onBlur={() => setTimeout(() => { setIsTypingForSuggestion(false); }, 200)}
+          onFocus={() => text && text.length > 2 && !isAiResponding && fetchSuggestions(text) }
+          disabled={isAiResponding}
         />
-        {showSuggestions && suggestions.length > 0 && (
+        {showSuggestions && suggestions.length > 0 && !isAiResponding && (
           <div className="absolute bottom-full left-0 mb-1 w-full bg-card border rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
-            {isLoadingSuggestion && <div className="p-2 text-sm text-muted-foreground flex items-center"><Spinner size="small" className="mr-2"/>Loading...</div>}
+            {isLoadingSuggestion && <div className="p-2 text-sm text-muted-foreground flex items-center"><Spinner size="small" className="mr-2"/>Yükleniyor...</div>}
             {!isLoadingSuggestion && suggestions.map((s, i) => (
               <div
                 key={i}
@@ -133,14 +133,20 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
         )}
       </div>
 
-      {/* File input is hidden and triggered by the button */}
-      <input type="file" id="file-input" accept="image/*" onChange={handleFileChange} className="hidden" />
-      <Button type="button" variant="ghost" size="icon" onClick={() => document.getElementById('file-input')?.click()} aria-label="Attach file" className="shrink-0">
+      <input type="file" id="file-input" accept="image/*" onChange={handleFileChange} className="hidden" disabled={isAiResponding} />
+      <Button type="button" variant="ghost" size="icon" onClick={() => document.getElementById('file-input')?.click()} aria-label="Dosya ekle" className="shrink-0" disabled={isAiResponding}>
         <Paperclip className="h-5 w-5" />
       </Button>
-      <Button type="submit" size="icon" aria-label="Send message" className="shrink-0 bg-accent hover:bg-accent/90">
-        <SendHorizonal className="h-5 w-5" />
-      </Button>
+      
+      {isAiResponding ? (
+        <Button type="button" variant="destructive" size="icon" onClick={onStopGenerating} aria-label="Durdur" className="shrink-0">
+          <Square className="h-5 w-5" />
+        </Button>
+      ) : (
+        <Button type="submit" size="icon" aria-label="Mesaj gönder" className="shrink-0 bg-accent hover:bg-accent/90" disabled={!text.trim() && !imageFile}>
+          <SendHorizonal className="h-5 w-5" />
+        </Button>
+      )}
     </form>
   );
 }

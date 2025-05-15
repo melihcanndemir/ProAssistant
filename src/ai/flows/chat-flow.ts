@@ -9,7 +9,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import type {ChatInput as ChatInputType, ChatOutput as ChatOutputType} from '@/types/ai';
+import type {GenerateResponse, StreamPart} from 'genkit';
 
 const ChatInputSchema = z.object({
   message: z.string().describe('The user message to the AI.'),
@@ -23,10 +23,6 @@ const ChatOutputSchema = z.object({
 });
 export type ChatOutput = z.infer<typeof ChatOutputSchema>;
 
-export async function chat(input: ChatInput): Promise<ChatOutput> {
-  return chatFlow(input);
-}
-
 const chatPrompt = ai.definePrompt({
   name: 'chatPrompt',
   input: {schema: ChatInputSchema},
@@ -37,19 +33,21 @@ const chatPrompt = ai.definePrompt({
 
   User Message: {{{message}}}
   AI Response: `,
-  // Example with history:
-  // prompt: `You are ProAssistant, a helpful AI assistant.
-  // {{#if history}}
-  // Conversation History:
-  // {{#each history}}
-  //   {{#if (eq role "user")}}User: {{content}}{{/if}}
-  //   {{#if (eq role "model")}}AI: {{content}}{{/if}}
-  // {{/each}}
-  // {{/if}}
-  // User Message: {{{message}}}
-  // AI Response: `,
 });
 
+// Exported function for the client to call for streaming chat
+export async function chat( // Made this function async
+  input: ChatInput
+): Promise<{ // Return type is now a Promise
+  stream: AsyncIterableIterator<StreamPart<typeof ChatOutputSchema>>;
+  response: Promise<GenerateResponse<z.infer<typeof ChatOutputSchema>>>;
+}> {
+  const {stream, response} = chatPrompt.generateStream(input);
+  return {stream, response};
+}
+
+// This 'chatFlow' const can be used for non-streaming scenarios or by Genkit tooling.
+// The client-side streaming will use the 'chat' function above.
 const chatFlow = ai.defineFlow(
   {
     name: 'chatFlow',
@@ -57,7 +55,7 @@ const chatFlow = ai.defineFlow(
     outputSchema: ChatOutputSchema,
   },
   async (input) => {
-    const llmResponse = await chatPrompt(input);
+    const llmResponse = await chatPrompt(input); // Non-streaming call
     const output = llmResponse.output;
 
     if (!output || !output.response) {
