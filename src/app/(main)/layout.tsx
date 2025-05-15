@@ -35,11 +35,12 @@ export default function MainLayout({ children }: { children: ReactNode }) {
     <SidebarProvider defaultOpen={true} >
       <div className="flex flex-col h-screen bg-background">
         <Navbar />
-        <div className="flex flex-row flex-1 w-full">
+        {/* Added overflow-hidden to this flex container */}
+        <div className="flex flex-row flex-1 w-full overflow-hidden">
           <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground hidden md:flex">
             <ChatHistorySidebar />
           </Sidebar>
-          {/* Added w-0 to work with flex-1 for robust width calculation */}
+          {/* SidebarInset should take remaining space. flex-1, min-w-0, and w-0 are crucial. */}
           <SidebarInset className="flex-1 min-w-0 w-0 overflow-auto">
             {children}
           </SidebarInset>
