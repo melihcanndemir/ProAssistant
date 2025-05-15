@@ -1,4 +1,3 @@
-
 "use client";
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
@@ -13,7 +12,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
+import { SidebarTrigger } from '@/components/ui/sidebar'; 
 
 export function Navbar() {
   const { user, signOut, loading } = useAuth();
@@ -28,7 +28,10 @@ export function Navbar() {
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between max-w-screen-2xl px-4 md:px-6">
-        <Logo />
+        <div className="flex items-center gap-2">
+          <SidebarTrigger /> {/* Always visible for toggling sidebar/sheet */}
+          <Logo />
+        </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />
           {!loading && user && (

@@ -1,4 +1,3 @@
-
 "use client";
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
@@ -6,6 +5,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/shared/Navbar';
 import { Spinner } from '@/components/ui/spinner';
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarInset,
+} from '@/components/ui/sidebar';
+import { ChatHistorySidebar } from '@/components/chat/ChatHistorySidebar';
 
 export default function MainLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -26,11 +31,20 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      <Navbar />
-      <main className="flex-1 overflow-hidden">
-        {children}
-      </main>
-    </div>
+    <SidebarProvider defaultOpen={true} >
+      <div className="flex flex-col h-screen bg-background">
+        <Navbar />
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground hidden md:flex"> {/* Hidden on mobile, Sheet is used via trigger */}
+            <ChatHistorySidebar />
+          </Sidebar>
+          <SidebarInset>
+            <main className="flex-1 overflow-hidden h-full">
+              {children}
+            </main>
+          </SidebarInset>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }
