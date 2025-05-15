@@ -70,5 +70,4 @@ export default function ChatRedirectPage() {
 
   return null; // Or some fallback UI if redirection takes time and spinner isn't preferred
 }
-
-//git
+

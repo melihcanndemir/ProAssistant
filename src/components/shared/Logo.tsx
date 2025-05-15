@@ -10,5 +10,4 @@ export function Logo() {
     </Link>
   );
 }
-
-//git
+

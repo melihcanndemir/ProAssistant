@@ -19,5 +19,4 @@ export interface ChatInput {
 export interface ChatOutput {
   response: string;
 }
-
-//git
+

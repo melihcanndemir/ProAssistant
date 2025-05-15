@@ -37,5 +37,4 @@ export function Spinner({ className, size = 'medium', ...props }: SpinnerProps) 
     </svg>
   );
 }
-
-//git
+

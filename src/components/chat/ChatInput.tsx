@@ -150,5 +150,4 @@ export function ChatInput({ onSendMessage, isAiResponding, onStopGenerating }: C
     </form>
   );
 }
-
-//git
+

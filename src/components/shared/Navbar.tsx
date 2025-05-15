@@ -66,5 +66,4 @@ export function Navbar() {
     </nav>
   );
 }
-
-//git
+
