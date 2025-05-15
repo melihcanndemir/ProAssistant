@@ -52,13 +52,13 @@ export default function ChatPage() {
     // let imageUrl: string | undefined = undefined;
     // if (imageFile) { /* Upload logic here */ }
 
-    let citations: Citation[] | undefined;
+    let generatedCitations: Citation[] | undefined;
     try {
       // Check for URLs and generate citations
       if (text.includes('http://') || text.includes('https://')) {
         const citationResult = await generateCitationsFlow({ message: text });
         if (citationResult && citationResult.citations.length > 0) {
-          citations = citationResult.citations;
+          generatedCitations = citationResult.citations;
         }
       }
     } catch (error) {
@@ -70,24 +70,27 @@ export default function ChatPage() {
       });
     }
     
-    const userMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+    const userMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       text: text.trim(),
       sender: 'user',
       userId: user.uid,
       timestamp: serverTimestamp(), // Firestore server timestamp
-      // imageUrl,
-      citations,
+      // imageUrl, // Add if/when image upload is implemented
     };
+
+    if (generatedCitations && generatedCitations.length > 0) {
+      userMessageData.citations = generatedCitations;
+    }
 
     try {
       const messagesCollection = collection(db, `users/${user.uid}/messages`);
-      await addDoc(messagesCollection, userMessage);
+      await addDoc(messagesCollection, userMessageData);
 
       // Mock AI Response
       const aiResponseText = `ProAssistant received: "${text.trim()}"`;
-      if (citations && citations.length > 0) {
-        // aiResponseText += `\n\nCitations found: \n${citations.map(c => `- ${c.url}: ${c.citationText}`).join('\n')}`;
-      }
+      // if (generatedCitations && generatedCitations.length > 0) {
+      //   aiResponseText += `\n\nCitations found: \n${generatedCitations.map(c => `- ${c.url}: ${c.citationText}`).join('\n')}`;
+      // }
 
       const aiMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
         text: aiResponseText,
