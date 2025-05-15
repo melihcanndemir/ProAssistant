@@ -71,8 +71,6 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
 
-    // This is the internal state of the sidebar.
-    // We use openProp and setOpenProp for control from outside the component.
     const [_open, _setOpen] = React.useState(defaultOpen)
     const open = openProp ?? _open
     const setOpen = React.useCallback(
@@ -83,21 +81,17 @@ const SidebarProvider = React.forwardRef<
         } else {
           _setOpen(openState)
         }
-
-        // This sets the cookie to keep the sidebar state.
         document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
       },
       [setOpenProp, open]
     )
 
-    // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
       return isMobile
         ? setOpenMobile((open) => !open)
         : setOpen((open) => !open)
     }, [isMobile, setOpen, setOpenMobile])
 
-    // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         if (
@@ -113,8 +107,6 @@ const SidebarProvider = React.forwardRef<
       return () => window.removeEventListener("keydown", handleKeyDown)
     }, [toggleSidebar])
 
-    // We add a state so that we can do data-state="expanded" or "collapsed".
-    // This makes it easier to style the sidebar with Tailwind classes.
     const state = open ? "expanded" : "collapsed"
 
     const contextValue = React.useMemo<SidebarContext>(
@@ -170,7 +162,7 @@ const Sidebar = React.forwardRef<
       side = "left",
       variant = "sidebar",
       collapsible = "offcanvas",
-      className: originalClassNameFromLayout, // Renamed to avoid conflict
+      className: originalClassNameFromLayout,
       children,
       ...props
     },
@@ -183,7 +175,7 @@ const Sidebar = React.forwardRef<
         <div
           className={cn(
             "flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground",
-            originalClassNameFromLayout // Apply className here for this specific variant
+            originalClassNameFromLayout
           )}
           ref={ref}
           {...props}
@@ -201,7 +193,7 @@ const Sidebar = React.forwardRef<
             data-mobile="true"
             className={cn(
               "w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden",
-              originalClassNameFromLayout // Apply className here for mobile sheet content
+              originalClassNameFromLayout
             )}
             style={
               {
@@ -217,51 +209,77 @@ const Sidebar = React.forwardRef<
     }
     
     // Desktop sidebar
+    // This is the width class for the 'peer' element, which participates in the flex layout.
+    const peerWidthClass = (collapsible === 'icon' && state === 'collapsed')
+      ? (variant === "floating" || variant === "inset"
+          ? "w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]" // For floating/inset, peer takes space for icons + padding
+          : "w-[--sidebar-width-icon]")
+      : "w-[--sidebar-width]";
+
+    // This is for the visual width of the fixed content area.
+    const fixedContentVisualWidthClass = (collapsible === 'icon' && state === 'collapsed')
+      ? (variant === "floating" || variant === "inset"
+          ? "w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]" // floating/inset fixed content includes padding
+          : "w-[--sidebar-width-icon]")
+      : "w-[--sidebar-width]";
+
     return (
-      <div
+      <div // This is the PEER element
         ref={ref}
         className={cn(
-          "group peer hidden md:block text-sidebar-foreground",
-          "flex-shrink-0" // Explicitly prevent shrinking
+          "group peer hidden md:block", // Base classes for the peer
+          "flex-shrink-0 transition-all duration-200 ease-linear", // Animate width changes
+          peerWidthClass, // Dynamic width for flex layout calculation
+          originalClassNameFromLayout // Classes from layout.tsx (bg, border, text color, md:flex)
         )}
-        style={{ flexBasis: 'var(--sidebar-width)' }} // Explicitly set basis width
+        // NO INLINE STYLE for flex-basis or width here
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
-        // {...props} should not be spread here if originalClassNameFromLayout is handled below
+        {...props} // Spread remaining props like data-* attributes
       >
-        {/* This div pushes the content over because the actual sidebar is fixed positioned */}
+        {/* Placeholder div: its width should also track the peer's width for internal consistency or non-fixed scenarios.
+            If the peer div correctly sizes itself, this placeholder's role in *external* flex layout is diminished for fixed sidebars.
+        */}
         <div
           className={cn(
-            "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
+            "relative h-svh bg-transparent transition-all duration-200 ease-linear",
+             // This placeholder should match the peer's current width state.
+            (collapsible === 'icon' && state === 'collapsed')
+              ? (variant === "floating" || variant === "inset"
+                  ? "w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
+                  : "w-[--sidebar-width-icon]")
+              : "w-[--sidebar-width]",
             "group-data-[collapsible=offcanvas]:w-0",
-            "group-data-[side=right]:rotate-180",
-            variant === "floating" || variant === "inset"
-              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
+            "group-data-[side=right]:rotate-180"
           )}
         />
         {/* Actual fixed sidebar content */}
         <div
           className={cn(
-            "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
-            side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
-            originalClassNameFromLayout // Pass the className from layout.tsx here
+            "fixed inset-y-0 z-10 flex h-svh flex-col", // flex-col for children layout
+            "transition-all duration-200 ease-linear md:flex",
+            fixedContentVisualWidthClass, // Visual width of the fixed element
+            // Positioning
+            side === "left" ? "left-0" : "right-0",
+            // Offcanvas specific transforms for collapsed state
+            (collapsible === 'offcanvas' && state === 'collapsed')
+              ? (side === 'left' ? '-translate-x-full' : 'translate-x-full')
+              : 'translate-x-0',
+            // Base styling for the fixed content box itself
+            "bg-sidebar text-sidebar-foreground", 
+            // Borders for standard variant (not floating/inset, not icon-collapsed offcanvas)
+            (variant !== "floating" && variant !== "inset" && !(collapsible === 'icon' && state === 'collapsed' && variant === 'offcanvas'))
+              ? (side === "left" ? "border-r border-sidebar-border" : "border-l border-sidebar-border")
+              : "",
+            // Padding specifically for floating/inset variants (applied to the content wrapper)
+            (variant === "floating" || variant === "inset") && "p-2",
+            // Specific styling for floating variant
+            variant === "floating" && "rounded-lg border border-sidebar-border shadow"
           )}
-           // {...props} was here, but props are already handled by Sheet or collapsible="none" variant
         >
-          <div
-            data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
-          >
-            {children}
-          </div>
+          {children}
         </div>
       </div>
     )
@@ -332,7 +350,7 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-col bg-background", // Removed flex-1 from here as it's applied from layout
+        "relative flex min-h-svh flex-col bg-background",
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
@@ -471,7 +489,6 @@ const SidebarGroupAction = React.forwardRef<
       data-sidebar="group-action"
       className={cn(
         "absolute right-3 top-3.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
-        // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 after:md:hidden",
         "group-data-[collapsible=icon]:hidden",
         className
@@ -617,7 +634,6 @@ const SidebarMenuAction = React.forwardRef<
       data-sidebar="menu-action"
       className={cn(
         "absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
-        // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 after:md:hidden",
         "peer-data-[size=sm]/menu-button:top-1",
         "peer-data-[size=default]/menu-button:top-1.5",
@@ -660,7 +676,6 @@ const SidebarMenuSkeleton = React.forwardRef<
     showIcon?: boolean
   }
 >(({ className, showIcon = false, ...props }, ref) => {
-  // Random width between 50 to 90%.
   const width = React.useMemo(() => {
     return `${Math.floor(Math.random() * 40) + 50}%`
   }, [])
@@ -771,3 +786,4 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
