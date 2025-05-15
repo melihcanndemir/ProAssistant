@@ -2,15 +2,16 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
-import { ChatInput } from '@/components/chat/ChatInput';
+import { ChatInput as ChatInputComponent } from '@/components/chat/ChatInput'; // Renamed to avoid conflict
 import type { ChatMessage, Citation } from '@/types/chat';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { generateCitations as generateCitationsFlow } from '@/ai/flows/citation-generation';
+import { chat as chatFlow, type ChatInput } from '@/ai/flows/chat-flow'; // Import the new chat flow
 import { useToast } from '@/hooks/use-toast';
 import { Card } from '@/components/ui/card';
-import { Metadata } from 'next';
+// import { Metadata } from 'next'; // Cannot be used in client component
 
 // Cannot set metadata in client component, should be done in a parent server component or page.tsx if it were server-rendered.
 // export const metadata: Metadata = {
@@ -47,14 +48,8 @@ export default function ChatPage() {
   const handleSendMessage = async (text: string, imageFile?: File) => {
     if (!user || (!text.trim() && !imageFile)) return;
 
-    // For now, image upload to Firebase Storage is not implemented to keep it simple.
-    // We'll just store a placeholder or ignore imageFile for now.
-    // let imageUrl: string | undefined = undefined;
-    // if (imageFile) { /* Upload logic here */ }
-
     let generatedCitations: Citation[] | undefined;
     try {
-      // Check for URLs and generate citations
       if (text.includes('http://') || text.includes('https://')) {
         const citationResult = await generateCitationsFlow({ message: text });
         if (citationResult && citationResult.citations.length > 0) {
@@ -74,42 +69,55 @@ export default function ChatPage() {
       text: text.trim(),
       sender: 'user',
       userId: user.uid,
-      timestamp: serverTimestamp(), // Firestore server timestamp
-      // imageUrl, // Add if/when image upload is implemented
+      timestamp: serverTimestamp(),
     };
 
     if (generatedCitations && generatedCitations.length > 0) {
       userMessageData.citations = generatedCitations;
     }
 
+    const messagesCollection = collection(db, `users/${user.uid}/messages`);
+    
     try {
-      const messagesCollection = collection(db, `users/${user.uid}/messages`);
+      // Add user message to Firestore
       await addDoc(messagesCollection, userMessageData);
 
-      // Mock AI Response
-      const aiResponseText = `ProAssistant received: "${text.trim()}"`;
-      // if (generatedCitations && generatedCitations.length > 0) {
-      //   aiResponseText += `\n\nCitations found: \n${generatedCitations.map(c => `- ${c.url}: ${c.citationText}`).join('\n')}`;
-      // }
+      // Get AI Response
+      const aiFlowInput: ChatInput = { message: text.trim() };
+      // Here you could also pass message history to the AI if your flow supports it
+      // aiFlowInput.history = messages.slice(-10).map(m => ({role: m.sender === 'user' ? 'user' : 'model', content: m.text}));
+      
+      const aiResponseOutput = await chatFlow(aiFlowInput);
 
-      const aiMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+      let aiResponseText = "I'm sorry, I couldn't quite understand that. Could you please rephrase?"; // Default fallback
+      if (aiResponseOutput && aiResponseOutput.response) {
+        aiResponseText = aiResponseOutput.response;
+      }
+      
+      const aiMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
         text: aiResponseText,
+        sender: 'ai',
+        userId: 'proassistant-ai', 
+        timestamp: serverTimestamp(),
+      };
+      // Add AI message to Firestore
+      await addDoc(messagesCollection, aiMessageData);
+
+    } catch (error) {
+      console.error("Error sending message or getting AI response:", error);
+      toast({
+        title: "Error",
+        description: "Could not send message or get AI response.",
+        variant: "destructive",
+      });
+       // Optionally, add a more generic AI error message to chat if the flow itself failed
+       const errorAiMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+        text: "Apologies, I'm having trouble connecting right now. Please try again in a moment.",
         sender: 'ai',
         userId: 'proassistant-ai',
         timestamp: serverTimestamp(),
       };
-      // Simulate a delay for AI response
-      setTimeout(async () => {
-        await addDoc(messagesCollection, aiMessage);
-      }, 1000);
-
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({
-        title: "Message Error",
-        description: "Could not send message.",
-        variant: "destructive",
-      });
+      await addDoc(messagesCollection, errorAiMessage);
     }
   };
   
@@ -121,7 +129,7 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
         <div className="border-t p-4 md:p-6 bg-background">
-          <ChatInput onSendMessage={handleSendMessage} />
+          <ChatInputComponent onSendMessage={handleSendMessage} />
         </div>
       </Card>
     </div>
