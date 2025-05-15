@@ -195,7 +195,7 @@ export default function ChatPage() {
   };
   
   return (
-    <div className="flex flex-col h-full p-4 md:p-6 bg-secondary/50">
+    <div className="flex flex-col h-full w-full p-4 md:p-6 bg-secondary/50">
       <Card className="flex flex-col flex-1 shadow-lg overflow-hidden w-full">
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
           <ChatMessageList messages={messages} />
