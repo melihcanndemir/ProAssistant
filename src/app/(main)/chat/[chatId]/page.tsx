@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, updateDoc, doc, query, orderBy, onSnapshot, serverTimestamp, Timestamp, DocumentReference, getDoc, setDoc } from 'firebase/firestore';
 import { generateCitations as generateCitationsFlow } from '@/ai/flows/citation-generation';
-import { chat as chatFlow, type ChatInput } from '@/ai/flows/chat-flow';
+import { chat as chatFlowFn, type ChatInput } from '@/ai/flows/chat-flow'; // Renamed to avoid conflict
 import { useToast } from '@/hooks/use-toast';
 import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
@@ -97,7 +97,6 @@ export default function ChatSessionPage() {
     try {
       await addDoc(messagesCollection, userMessageData);
 
-      // Update chat session metadata (title and lastMessageTimestamp)
       const chatUpdateData: { lastMessageTimestamp: any, title?: string } = {
         lastMessageTimestamp: serverTimestamp(),
       };
@@ -106,11 +105,9 @@ export default function ChatSessionPage() {
       if (chatDocSnap.exists() && chatDocSnap.data()?.title === "New Chat") {
         chatUpdateData.title = text.trim().split(' ').slice(0, 5).join(' ') + (text.trim().split(' ').length > 5 ? '...' : '');
       }
-      // Only update if there's something to update (timestamp always, title conditionally)
       if (chatUpdateData.title || Object.keys(chatUpdateData).length > 1) {
         await setDoc(chatDocRef, chatUpdateData, { merge: true });
       }
-
 
       const aiMessagePlaceholderData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
         text: '...', 
@@ -134,17 +131,22 @@ export default function ChatSessionPage() {
       ));
 
       const aiFlowInput: ChatInput = { message: text.trim() };
-      const { stream, response: finalResponsePromise } = await chatFlow(aiFlowInput);
+      const { stream, response: finalResponsePromise } = await chatFlowFn(aiFlowInput);
 
       let accumulatedResponse = '';
       for await (const chunk of stream) {
         if (abortControllerRef.current?.signal.aborted) {
           console.log("AI response streaming aborted by user.");
           if (aiMessageRef) {
-            await updateDoc(aiMessageRef, { text: accumulatedResponse + "\n(Response cancelled)", isLoading: false, timestamp: serverTimestamp() });
+             // Don't set isLoading to false yet, finalization below will do it.
+             // Only update text if there's something to show from partial stream.
+            if (accumulatedResponse) {
+                await updateDoc(aiMessageRef, { text: accumulatedResponse + "\n(Yanıt iptal edildi)"});
+            } else {
+                await updateDoc(aiMessageRef, { text: "(Yanıt iptal edildi)"});
+            }
           }
-          setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: accumulatedResponse + "\n(Response cancelled)", isLoading: false} : m));
-          break;
+          break; 
         }
         
         if (chunk.output?.response) {
@@ -161,25 +163,46 @@ export default function ChatSessionPage() {
       }
       
       if (aiMessageRef) {
-        const finalAiOutput = abortControllerRef.current?.signal.aborted ? null : (await finalResponsePromise).output;
-        const finalText = finalAiOutput?.response ?? (accumulatedResponse + (abortControllerRef.current?.signal.aborted ? "\n(Response cancelled)" : ""));
+        const finalLlmResponse = abortControllerRef.current?.signal.aborted ? null : await finalResponsePromise;
+        const finalAiOutput = finalLlmResponse?.output;
+        let finalTextToSave: string;
+
+        if (abortControllerRef.current?.signal.aborted) {
+          finalTextToSave = accumulatedResponse ? accumulatedResponse + "\n(Yanıt iptal edildi)" : "(Yanıt iptal edildi)";
+        } else {
+          if (finalAiOutput?.response && finalAiOutput.response.trim() !== "") {
+            finalTextToSave = finalAiOutput.response;
+          } else if (accumulatedResponse && accumulatedResponse.trim() !== "") {
+            finalTextToSave = accumulatedResponse;
+            console.warn("Final AI output was empty or invalid, using accumulated stream data. Full LLM response:", JSON.stringify(finalLlmResponse));
+            // Optionally, show a less severe toast if stream data was used
+            toast({
+              title: "Yapay Zeka Uyarısı",
+              description: "Yapay zekanın nihai yanıtı boştu, akıştan gelen veri kullanıldı.",
+              variant: "default",
+            });
+          } else {
+            finalTextToSave = "Üzgünüm, şu anda bir yanıt oluşturamıyorum.";
+            console.error("AI failed to provide a valid response. Full LLM response:", JSON.stringify(finalLlmResponse));
+            toast({
+              title: "Yapay Zeka Hatası",
+              description: "Yapay zeka geçerli bir yanıt döndüremedi.",
+              variant: "destructive",
+            });
+          }
+        }
         
-        await updateDoc(aiMessageRef, { text: finalText, isLoading: false, timestamp: serverTimestamp() });
+        await updateDoc(aiMessageRef, { text: finalTextToSave, isLoading: false, timestamp: serverTimestamp() });
         setMessages(prevMessages =>
           prevMessages.map(msg =>
-            msg.id === aiMessageId ? { ...msg, text: finalText, isLoading: false } : msg
+            msg.id === aiMessageId ? { ...msg, text: finalTextToSave, isLoading: false } : msg
           )
         );
-        if (!finalAiOutput?.response && !abortControllerRef.current?.signal.aborted) {
-            const errorText = "Sorry, I couldn't complete my response.";
-            await updateDoc(aiMessageRef, { text: errorText, isLoading: false, timestamp: serverTimestamp() });
-            setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: errorText, isLoading: false} : m));
-        }
       }
 
     } catch (error: any) {
       console.error("Error sending message or getting AI response:", error);
-      const errorText = "Sorry, I encountered an issue while responding.";
+      const errorText = "Üzgünüm, yanıt verirken bir sorunla karşılaştım.";
       if (aiMessageRef && aiMessageId) {
         await updateDoc(aiMessageRef, { text: errorText, isLoading: false, timestamp: serverTimestamp() });
          setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: errorText, isLoading: false} : m));
@@ -193,8 +216,8 @@ export default function ChatSessionPage() {
         }
       }
       toast({
-        title: "AI Error",
-        description: error.message || "Could not get AI response.",
+        title: "Yapay Zeka Hatası",
+        description: error.message || "Yapay zeka yanıtı alınamadı.",
         variant: "destructive",
       });
     } finally {
@@ -234,4 +257,3 @@ export default function ChatSessionPage() {
     </div>
   );
 }
-

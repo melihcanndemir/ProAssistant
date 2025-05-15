@@ -36,12 +36,13 @@ const chatPrompt = ai.definePrompt({
 });
 
 // Exported function for the client to call for streaming chat
-export async function chat( // Made this function async
+export async function chat( 
   input: ChatInput
-): Promise<{ // Return type is now a Promise
+): Promise<{ 
   stream: AsyncIterableIterator<StreamPart<typeof ChatOutputSchema>>;
   response: Promise<GenerateResponse<z.infer<typeof ChatOutputSchema>>>;
 }> {
+  console.log('[AI CHAT STREAM FN] Received input:', JSON.stringify(input));
   const {stream, response} = chatPrompt.generateStream(input);
   return {stream, response};
 }
@@ -55,7 +56,9 @@ const chatFlow = ai.defineFlow(
     outputSchema: ChatOutputSchema,
   },
   async (input) => {
-    const llmResponse = await chatPrompt(input); // Non-streaming call
+    console.log('[AI CHAT FLOW - NON-STREAMING] Received input:', JSON.stringify(input));
+    const llmResponse = await chatPrompt(input); 
+    console.log('[AI CHAT FLOW - NON-STREAMING] LLM response:', JSON.stringify(llmResponse));
     const output = llmResponse.output;
 
     if (!output || !output.response) {
