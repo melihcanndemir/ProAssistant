@@ -35,11 +35,11 @@ export default function MainLayout({ children }: { children: ReactNode }) {
     <SidebarProvider defaultOpen={true} >
       <div className="flex flex-col h-screen bg-background">
         <Navbar />
-        <div className="flex flex-row flex-1 w-full overflow-hidden"> {/* Modified: Added flex-row and w-full */}
-          <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground hidden md:flex"> {/* Hidden on mobile, Sheet is used via trigger */}
+        <div className="flex flex-row flex-1 w-full"> {/* Modified: Removed overflow-hidden */}
+          <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground hidden md:flex">
             <ChatHistorySidebar />
           </Sidebar>
-          <SidebarInset className="flex-1 min-w-0 overflow-auto h-full"> {/* Modified: Added min-w-0, changed overflow-hidden to overflow-auto */}
+          <SidebarInset className="flex-1 min-w-0 overflow-auto"> {/* Modified: Removed h-full */}
             {children}
           </SidebarInset>
         </div>
