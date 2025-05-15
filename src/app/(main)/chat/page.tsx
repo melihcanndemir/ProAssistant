@@ -64,7 +64,7 @@ export default function ChatPage() {
       });
     }
     
-    const userMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+    const userMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any, citations?: Citation[] } = {
       text: text.trim(),
       sender: 'user',
       userId: user.uid,
@@ -196,7 +196,7 @@ export default function ChatPage() {
   
   return (
     <div className="flex flex-col h-full p-4 md:p-6 bg-secondary/50">
-      <Card className="flex flex-col flex-1 shadow-lg overflow-hidden">
+      <Card className="flex flex-col flex-1 shadow-lg overflow-hidden w-full">
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
           <ChatMessageList messages={messages} />
           <div ref={messagesEndRef} />

@@ -1,3 +1,4 @@
+
 "use client";
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
@@ -38,10 +39,8 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground hidden md:flex"> {/* Hidden on mobile, Sheet is used via trigger */}
             <ChatHistorySidebar />
           </Sidebar>
-          <SidebarInset>
-            <main className="flex-1 overflow-hidden h-full">
-              {children}
-            </main>
+          <SidebarInset className="flex-1 overflow-hidden h-full">
+            {children}
           </SidebarInset>
         </div>
       </div>

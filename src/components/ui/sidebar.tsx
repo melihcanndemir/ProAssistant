@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -315,7 +316,7 @@ const SidebarRail = React.forwardRef<
 SidebarRail.displayName = "SidebarRail"
 
 const SidebarInset = React.forwardRef<
-  HTMLDivElement,
+  HTMLMainElement, // Changed from HTMLDivElement
   React.ComponentProps<"main">
 >(({ className, ...props }, ref) => {
   return (
