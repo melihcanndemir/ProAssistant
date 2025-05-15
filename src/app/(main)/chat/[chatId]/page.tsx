@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, updateDoc, doc, query, orderBy, onSnapshot, serverTimestamp, Timestamp, DocumentReference, getDoc, setDoc } from 'firebase/firestore';
 import { generateCitations as generateCitationsFlow } from '@/ai/flows/citation-generation';
-import { chat as chatFlow, type ChatInput } from '@/ai/flows/chat-flow'; // Removed ChatOutput as it's inferred
+import { chat as chatFlow, type ChatInput } from '@/ai/flows/chat-flow';
 import { useToast } from '@/hooks/use-toast';
 import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
@@ -98,15 +98,18 @@ export default function ChatSessionPage() {
       await addDoc(messagesCollection, userMessageData);
 
       // Update chat session metadata (title and lastMessageTimestamp)
-      const chatDocSnap = await getDoc(chatDocRef);
       const chatUpdateData: { lastMessageTimestamp: any, title?: string } = {
         lastMessageTimestamp: serverTimestamp(),
       };
 
-      if (!chatDocSnap.exists() || chatDocSnap.data()?.title === "New Chat" || messages.length === 0) {
+      const chatDocSnap = await getDoc(chatDocRef);
+      if (chatDocSnap.exists() && chatDocSnap.data()?.title === "New Chat") {
         chatUpdateData.title = text.trim().split(' ').slice(0, 5).join(' ') + (text.trim().split(' ').length > 5 ? '...' : '');
       }
-      await setDoc(chatDocRef, chatUpdateData, { merge: true });
+      // Only update if there's something to update (timestamp always, title conditionally)
+      if (chatUpdateData.title || Object.keys(chatUpdateData).length > 1) {
+        await setDoc(chatDocRef, chatUpdateData, { merge: true });
+      }
 
 
       const aiMessagePlaceholderData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
@@ -147,8 +150,7 @@ export default function ChatSessionPage() {
         if (chunk.output?.response) {
           accumulatedResponse = chunk.output.response; 
           if (aiMessageRef) {
-            // No need to await updateDoc for each chunk in Firestore if focusing on UI responsiveness
-             updateDoc(aiMessageRef, { text: accumulatedResponse, isLoading: true }).catch(err => console.error("Error updating chunk to Firestore:", err));
+            updateDoc(aiMessageRef, { text: accumulatedResponse, isLoading: true }).catch(err => console.error("Error updating chunk to Firestore:", err));
           }
           setMessages(prevMessages =>
             prevMessages.map(msg =>
@@ -158,7 +160,6 @@ export default function ChatSessionPage() {
         }
       }
       
-      // Final update after stream ends or is aborted
       if (aiMessageRef) {
         const finalAiOutput = abortControllerRef.current?.signal.aborted ? null : (await finalResponsePromise).output;
         const finalText = finalAiOutput?.response ?? (accumulatedResponse + (abortControllerRef.current?.signal.aborted ? "\n(Response cancelled)" : ""));
@@ -187,7 +188,6 @@ export default function ChatSessionPage() {
          const errorAiMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
           text: errorText, sender: 'ai', userId: 'proassistant-ai', timestamp: serverTimestamp(), isLoading: false
         };
-        // Only add error message if a placeholder wasn't already potentially created and failed before stream
         if (!aiMessageId) { 
             await addDoc(messagesCollection, errorAiMessageData);
         }
@@ -234,3 +234,4 @@ export default function ChatSessionPage() {
     </div>
   );
 }
+
