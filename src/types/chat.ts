@@ -1,0 +1,16 @@
+import type { Timestamp } from 'firebase/firestore';
+
+export interface Citation {
+  url: string;
+  citationText: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+  userId: string;
+  timestamp: Timestamp; 
+  imageUrl?: string;
+  citations?: Citation[];
+}
