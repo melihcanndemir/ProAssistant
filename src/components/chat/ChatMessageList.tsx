@@ -6,9 +6,10 @@ import { ChatMessage } from './ChatMessage';
 
 interface ChatMessageListProps {
   messages: ChatMessageType[];
+  messagesEndRef?: React.RefObject<HTMLDivElement>;
 }
 
-export function ChatMessageList({ messages }: ChatMessageListProps) {
+export function ChatMessageList({ messages, messagesEndRef }: ChatMessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -23,10 +24,11 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   }
 
   return (
-    <div>
+    <div className="w-full"> {/* Added w-full to ensure it takes up horizontal space for items-center to work as expected */}
       {messages.map((msg) => (
         <ChatMessage key={msg.id} message={msg} />
       ))}
+      {messagesEndRef && <div ref={messagesEndRef} />}
     </div>
   );
 }

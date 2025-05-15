@@ -123,16 +123,8 @@ export default function ChatPage() {
         }
         
         if (chunk.output?.response) {
-          // Append the new part of the response.
-          // Genkit streams can sometimes send the whole acculumated response in each chunk,
-          // or just the delta. The prompt is simple so it's likely sending deltas or small fulls.
-          // For this example, we assume `chunk.output.response` is the *new piece* or *current full text*.
-          // To be safe, let's just set it as the current text.
           accumulatedResponse = chunk.output.response; 
           if (aiMessageRef) {
-            // No need to await updateDoc for every chunk if performance is critical,
-            // but it ensures data persistence if connection drops.
-            // For a smoother UI, you might only update Firestore less frequently or at the end.
             await updateDoc(aiMessageRef, { text: accumulatedResponse, isLoading: true });
           }
           setMessages(prevMessages =>
@@ -170,12 +162,11 @@ export default function ChatPage() {
         await updateDoc(aiMessageRef, { text: errorText, isLoading: false, timestamp: serverTimestamp() });
          setMessages(prev => prev.map(m => m.id === aiMessageId ? {...m, text: errorText, isLoading: false} : m));
       } else {
-         // If AI placeholder wasn't even added to FS or local state correctly
-         setMessages(prev => prev.filter(m => m.id !== tempClientAiMessageId)); // Remove optimistic placeholder
+         setMessages(prev => prev.filter(m => m.id !== tempClientAiMessageId)); 
          const errorAiMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
           text: errorText, sender: 'ai', userId: 'proassistant-ai', timestamp: serverTimestamp(), isLoading: false
         };
-        await addDoc(messagesCollection, errorAiMessage); // Add a new error message
+        await addDoc(messagesCollection, errorAiMessage); 
       }
       toast({
         title: "AI Hatası",
@@ -197,9 +188,8 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-full w-full p-4 md:p-6 bg-secondary/50">
       <Card className="flex flex-col flex-1 shadow-lg overflow-hidden w-full">
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-          <ChatMessageList messages={messages} />
-          <div ref={messagesEndRef} />
+        <div className="flex flex-col flex-1 justify-center items-center overflow-y-auto p-4 md:p-6">
+          <ChatMessageList messages={messages} messagesEndRef={messagesEndRef} />
         </div>
         <div className="border-t p-4 md:p-6 bg-background">
           <ChatInputComponent 
